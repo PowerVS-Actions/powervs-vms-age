@@ -28,19 +28,20 @@ function check_connectivity() {
 }
 
 function authenticate() {
-    
+
     local APY_KEY="$1"
-    
+
     if [ -z "$APY_KEY" ]; then
         echo "API KEY was not set."
         exit
     fi
-    ibmcloud login --no-region --apikey "$APY_KEY"
+    ibmcloud login --no-region --apikey "$APY_KEY" > /dev/null 2>&1
 }
 
 function get_all_crn(){
-	rm -f /tmp/crns
-	ibmcloud pi service-list --json | jq -r '.[] | "\(.CRN),\(.Name)"' >> /tmp/crns
+    TODAY=$(date '+%Y%m%d')
+	rm -f /tmp/crns-"$TODAY"
+	ibmcloud pi service-list --json | jq -r '.[] | "\(.CRN),\(.Name)"' >> /tmp/crns-"$TODAY"
 }
 
 function set_powervs() {
@@ -56,33 +57,36 @@ function set_powervs() {
 
 function vm_age() {
 
-    rm -f /tmp/vms
+    TODAY=$(date '+%Y%m%d')
+    rm -f /tmp/vms-"$TODAY"
 	PVS_NAME=$1
 	IBMCLOUD_ID=$2
 	IBMCLOUD_NAME=$3
 
-    ibmcloud pi ins --json | jq -r '.Payload.pvmInstances[] | "\(.pvmInstanceID),\(.serverName),\(.networks[].ip),\(.status),\(.sysType),\(.creationDate)"' > /tmp/vms
+    ibmcloud pi ins --json | jq -r '.Payload.pvmInstances[] | "\(.pvmInstanceID),\(.serverName),\(.networks[].ip),\(.status),\(.sysType),\(.creationDate),\(.osType),\(.processors),\(.memory)"' > /tmp/vms-"$TODAY"
 
-    TODAY=$(date '+%Y%m%d')
-
-    while read -r line; do 
-        VM_ID=$(echo "$line" | awk -F ',' '{print $1}')
+    while read -r line; do
+        PVS_ID=$(echo "$line" | awk -F ',' '{print $1}')
         VM_NAME=$(echo "$line" | awk -F ',' '{print $2}')
         VM_CREATION_DATE=$(echo "$line" | awk -F ',' '{print $6}')
-        
+
         Y=$(echo "$VM_CREATION_DATE" | awk -F '-' '{print $1}')
         M=$(echo "$VM_CREATION_DATE" | awk -F '-' '{print $2}' | sed 's/^0*//')
         D=$(echo "$VM_CREATION_DATE" | awk -F '-' '{print $3}' | awk -F 'T' '{print $1}' | sed 's/^0*//')
         DIFF=$(python3 -c "from datetime import date as d; print(d.today() - d($Y, $M, $D))" | awk -F ',' '{print $1}')
+
+        OS=$(echo "$line" | awk -F ',' '{print $7}')
+        PROCESSOR=$(echo "$line" | awk -F ',' '{print $8}')
+        MEMORY=$(echo "$line" | awk -F ',' '{print $9}')
 	#$VM_CREATION_DATE
-		
-	DIFF=$(echo $DIFF | tr -d "days" | tr -d " ")
-		
+
+	DIFF=$(echo "$DIFF" | tr -d "days" | tr -d " ")
+
 	if [[ "$DIFF" == "0:00:00" ]]; then
 		DIFF="0"
 	fi
-        echo "$IBMCLOUD_ID,$IBMCLOUD_NAME,$PVS_NAME,$VM_ID,$VM_NAME,$DIFF" >> all_vms_$TODAY.csv
-    done < /tmp/vms
+        echo "$IBMCLOUD_ID,$IBMCLOUD_NAME,$PVS_NAME,$PVS_ID,$VM_NAME,$DIFF,$OS,$PROCESSOR,$MEMORY" >> all_vms_"$TODAY".csv
+    done < /tmp/vms-"$TODAY"
 }
 
 function get_vms_per_crn(){
@@ -93,11 +97,10 @@ function get_vms_per_crn(){
         echo "$NAME"
 		set_powervs "$CRN"
         vm_age "$NAME" "$1" "$2"
-	done < /tmp/crns
+	done < /tmp/crns-"$TODAY"
 }
 
 function run (){
-
 	ACCOUNTS=()
 	while IFS= read -r line; do
 		clean_line=$(echo "$line" | tr -d '\r')
@@ -110,7 +113,7 @@ function run (){
 		IBMCLOUD_NAME=$(echo "$IBMCLOUD" | awk -F ":" '{print $2}')
 		API_KEY=$(echo "$i" | awk -F "," '{print $2}')
 
-		echo "$IBMCLOUD","$IBMCLOUD_ID","$IBMCLOUD_NAME","$API_KEY"
+		echo -n "Collecting data from $IBMCLOUD..."
 
 		if [ -z "$API_KEY" ]; then
 		    echo
