@@ -5,6 +5,14 @@
     Rafael Sene <rpsene@br.ibm.com> - Initial implementation.
 '
 
+# Trap ctrl-c and call ctrl_c()
+trap ctrl_c INT
+
+function ctrl_c() {
+    echo "Bye!"
+    exit 0
+}
+
 function check_dependencies() {
 
     DEPENDENCIES=(ibmcloud curl sh wget jq)
@@ -21,7 +29,6 @@ function check_dependencies() {
 function check_connectivity() {
 
     if ! curl --output /dev/null --silent --head --fail http://cloud.ibm.com; then
-        echo
         echo "ERROR: please, check your internet connection."
         exit 1
     fi
@@ -62,11 +69,12 @@ function vm_age() {
 	PVS_NAME=$1
 	IBMCLOUD_ID=$2
 	IBMCLOUD_NAME=$3
+    PVS_ZONE=$4
 
     ibmcloud pi ins --json | jq -r '.Payload.pvmInstances[] | "\(.pvmInstanceID),\(.serverName),\(.networks[].ip),\(.status),\(.sysType),\(.creationDate),\(.osType),\(.processors),\(.memory)"' > /tmp/vms-"$TODAY"
 
     while read -r line; do
-        PVS_ID=$(echo "$line" | awk -F ',' '{print $1}')
+        VM_ID=$(echo "$line" | awk -F ',' '{print $1}')
         VM_NAME=$(echo "$line" | awk -F ',' '{print $2}')
         VM_CREATION_DATE=$(echo "$line" | awk -F ',' '{print $6}')
 
@@ -78,14 +86,13 @@ function vm_age() {
         OS=$(echo "$line" | awk -F ',' '{print $7}')
         PROCESSOR=$(echo "$line" | awk -F ',' '{print $8}')
         MEMORY=$(echo "$line" | awk -F ',' '{print $9}')
-	#$VM_CREATION_DATE
 
-	DIFF=$(echo "$DIFF" | tr -d "days" | tr -d " ")
+	    DIFF=$(echo "$DIFF" | tr -d "days" | tr -d " ")
 
-	if [[ "$DIFF" == "0:00:00" ]]; then
-		DIFF="0"
-	fi
-        echo "$IBMCLOUD_ID,$IBMCLOUD_NAME,$PVS_NAME,$PVS_ID,$VM_NAME,$DIFF,$OS,$PROCESSOR,$MEMORY" >> all_vms_"$TODAY".csv
+	    if [[ "$DIFF" == "0:00:00" ]]; then
+		    DIFF="0"
+	    fi
+        echo "$IBMCLOUD_ID,$IBMCLOUD_NAME,$PVS_NAME,$PVS_ZONE,$VM_ID,$VM_NAME,$DIFF,$OS,$PROCESSOR,$MEMORY" >> all_vms_"$TODAY".csv
     done < /tmp/vms-"$TODAY"
 }
 
@@ -93,10 +100,9 @@ function get_vms_per_crn(){
 	while read -r line; do
         CRN=$(echo "$line" | awk -F ',' '{print $1}')
         NAME=$(echo "$line" | awk -F ',' '{print $2}')
-        echo "****************************************"
-        echo "$NAME"
+        POWERVS_ZONE=$(echo "$line" | awk -F ':' '{print $6}')
 		set_powervs "$CRN"
-        vm_age "$NAME" "$1" "$2"
+        vm_age "$NAME" "$1" "$2" "$POWERVS_ZONE"
 	done < /tmp/crns-"$TODAY"
 }
 
@@ -113,24 +119,23 @@ function run (){
 		IBMCLOUD_NAME=$(echo "$IBMCLOUD" | awk -F ":" '{print $2}')
 		API_KEY=$(echo "$i" | awk -F "," '{print $2}')
 
-		echo -n "Collecting data from $IBMCLOUD..."
-
 		if [ -z "$API_KEY" ]; then
 		    echo
-			  echo "ERROR: please, set your IBM Cloud API Key."
-			  echo "		 e.g ./vms-age.sh API_KEY"
-			  echo
-			  exit 1
+			echo "ERROR: please, set your IBM Cloud API Key."
+			echo "		 e.g ./vms-age.sh API_KEY"
+			echo
+			exit 1
 		else
-			  #API_KEY=$1
-			  echo
-			  check_dependencies
-			  check_connectivity
-			  authenticate "$API_KEY"
-			  get_all_crn
-			  get_vms_per_crn "$IBMCLOUD_ID" "$IBMCLOUD_NAME"
+			#API_KEY=$1
+			echo
+			check_dependencies
+			check_connectivity
+			authenticate "$API_KEY"
+			get_all_crn
+			get_vms_per_crn "$IBMCLOUD_ID" "$IBMCLOUD_NAME"
 		fi
 	done
+    awk 'NF' ./*.csv
 }
 
 run "$@"
