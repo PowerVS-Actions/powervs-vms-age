@@ -76,8 +76,10 @@ function vm_age() {
     while read -r line; do
         VM_ID=$(echo "$line" | awk -F ',' '{print $1}')
         VM_NAME=$(echo "$line" | awk -F ',' '{print $2}')
-        VM_CREATION_DATE=$(echo "$line" | awk -F ',' '{print $6}')
-
+        STATUS=$(echo "$line" | awk -F ',' '{print $4}')
+	SYSTYPE=$(echo "$line" | awk -F ',' '{print $5}')
+	VM_CREATION_DATE=$(echo "$line" | awk -F ',' '{print $6}')
+	
         Y=$(echo "$VM_CREATION_DATE" | awk -F '-' '{print $1}')
         M=$(echo "$VM_CREATION_DATE" | awk -F '-' '{print $2}' | sed 's/^0*//')
         D=$(echo "$VM_CREATION_DATE" | awk -F '-' '{print $3}' | awk -F 'T' '{print $1}' | sed 's/^0*//')
@@ -92,7 +94,7 @@ function vm_age() {
 	    if [[ "$DIFF" == "0:00:00" ]]; then
 		    DIFF="0"
 	    fi
-        echo "$IBMCLOUD_ID,$IBMCLOUD_NAME,$PVS_NAME,$PVS_ZONE,$VM_ID,$VM_NAME,$DIFF,$OS,$PROCESSOR,$MEMORY" >> all_vms_"$TODAY".csv
+        echo "$IBMCLOUD_ID,$IBMCLOUD_NAME,$PVS_NAME,$PVS_ZONE,$VM_ID,$VM_NAME,$DIFF,$OS,$PROCESSOR,$MEMORY,$SYSTYPE,$STATUS" >> all_vms_"$TODAY".csv
     done < /tmp/vms-"$TODAY"
 }
 
