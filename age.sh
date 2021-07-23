@@ -71,7 +71,7 @@ function vm_age() {
 	IBMCLOUD_NAME=$3
     PVS_ZONE=$4
 
-    ibmcloud pi ins --json | jq -r '.Payload.pvmInstances[] | "\(.pvmInstanceID),\(.serverName),\(.networks[].ip),\(.status),\(.sysType),\(.creationDate),\(.osType),\(.processors),\(.memory)"' > /tmp/vms-"$TODAY"
+    ibmcloud pi ins --json | jq -r '.Payload.pvmInstances[] | "\(.pvmInstanceID),\(.serverName),\(.networks[].ip),\(.status),\(.sysType),\(.creationDate),\(.osType),\(.processors),\(.memory),\(.health.status)"' > /tmp/vms-"$TODAY"
 
     while read -r line; do
         VM_ID=$(echo "$line" | awk -F ',' '{print $1}')
@@ -88,13 +88,14 @@ function vm_age() {
         OS=$(echo "$line" | awk -F ',' '{print $7}')
         PROCESSOR=$(echo "$line" | awk -F ',' '{print $8}')
         MEMORY=$(echo "$line" | awk -F ',' '{print $9}')
+	HEALTH=$(echo "$line" | awk -F ',' '{print $10}')
 
 	    DIFF=$(echo "$DIFF" | tr -d "days" | tr -d " ")
 
 	    if [[ "$DIFF" == "0:00:00" ]]; then
 		    DIFF="0"
 	    fi
-        echo "$IBMCLOUD_ID,$IBMCLOUD_NAME,$PVS_NAME,$PVS_ZONE,$VM_ID,$VM_NAME,$DIFF,$OS,$PROCESSOR,$MEMORY,$SYSTYPE,$STATUS" >> all_vms_"$TODAY".csv
+        echo "$IBMCLOUD_ID,$IBMCLOUD_NAME,$PVS_NAME,$PVS_ZONE,$VM_ID,$VM_NAME,$DIFF,$OS,$PROCESSOR,$MEMORY,$SYSTYPE,$STATUS,$HEALTH" >> all_vms_"$TODAY".csv
     done < /tmp/vms-"$TODAY"
 }
 
